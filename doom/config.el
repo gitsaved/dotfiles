@@ -127,6 +127,15 @@
       save-interprogram-paste-before-kill t)
 
 ;; ============================================================================
+;; Workspace Configuration - Prevent new workspaces for emacsclient frames
+;; ============================================================================
+
+;; Don't create new workspace when opening emacsclient frames
+;; Instead, use the currently active workspace
+(after! persp-mode
+  (setq persp-emacsclient-init-frame-behaviour-override -1))
+
+;; ============================================================================
 ;; Vterm configuration - System-level terminal replacement
 ;; ============================================================================
 

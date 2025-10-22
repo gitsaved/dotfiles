@@ -48,6 +48,7 @@ COMMAND_TO_WM_CLASS = {
 # Special spawn commands for apps that need env vars (X11 version - no Wayland vars)
 COMMAND_SPAWN_OVERRIDE = {
     "firefox": "env GTK_USE_PORTAL=0 firefox",
+    "emacs": "emacsclient -c",
 }
 
 def focus_or_open_app(qtile, command, match_by_name=None):
@@ -212,6 +213,7 @@ keys = [
     Key([mod], "Tab", lazy.next_layout(), desc="Toggle between layouts"),
     # Application launch keybindings
     Key([mod], "t", lazy.function(focus_or_open_app, "/home/robert/.local/bin/vterm-launcher", "vterm"), desc="Focus or launch vterm"),
+    Key([mod], "e", lazy.function(focus_or_open_app, "emacs"), desc="Focus or launch Emacs"),
     Key([mod], "BackSpace", lazy.function(focus_or_open_app, "firefox"), desc="Focus or launch Firefox"),
     Key([mod], "q", lazy.window.kill(), desc="Kill focused window"),
 
