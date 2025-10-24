@@ -52,7 +52,83 @@
 
 ;; If you use `org' and don't want your org files in the default location below,
 ;; change `org-directory'. It must be set before org loads!
-(setq org-directory "~/org/")
+(setq org-directory "~/documents/org/")
+
+;; ============================================================================
+;; Org-mode Configuration - ADHD-friendly capture system
+;; ============================================================================
+
+(after! org
+  ;; Set org-agenda-files to scan only the root org directory (not subdirectories)
+  (setq org-agenda-files (list org-directory))
+
+  ;; Show project context in agenda view
+  ;; This displays the parent heading (project name) for each TODO
+  (setq org-agenda-prefix-format
+        '((agenda . " %i %-12:c%?-12t% s")
+          (todo . " %i %-12:c %(org-agenda-get-parent-heading) ")
+          (tags . " %i %-12:c")
+          (search . " %i %-12:c")))
+
+  ;; Helper function to get parent heading for agenda display
+  (defun org-agenda-get-parent-heading ()
+    "Get the parent heading of the current org entry for agenda display."
+    (save-excursion
+      (org-back-to-heading t)
+      (if (org-up-heading-safe)
+          (format "[%s] " (org-get-heading t t t t))
+        "")))
+
+  ;; Project selection for capture - simple and working
+  (defun my/org-goto-or-create-project ()
+    "Select existing project or create new one. Positions point for org-capture."
+    (let* ((all-headings '()))
+      ;; Collect all top-level project headings
+      (save-excursion
+        (goto-char (point-min))
+        (while (re-search-forward "^\\* \\(.+\\)$" nil t)
+          (let ((heading (match-string 1)))
+            (unless (string= heading "Instructions")
+              (push heading all-headings)))))
+      
+      (setq all-headings (nreverse all-headings))
+      
+      ;; Prompt for selection (nil nil allows free text for new projects)
+      (let ((selection (completing-read "Project: " all-headings nil nil)))
+        (goto-char (point-min))
+        ;; Try to find existing project
+        (unless (re-search-forward (format "^\\* %s$" (regexp-quote selection)) nil t)
+          ;; Project doesn't exist - create it at end
+          (goto-char (point-max))
+          (unless (bolp) (insert "\n"))
+          (insert "\n* " selection "\n:PROPERTIES:\n:CREATED: " 
+                  (format-time-string "[%Y-%m-%d %a]") "\n:END:\n\n")
+          (re-search-backward (format "^\\* %s$" (regexp-quote selection)) nil t))
+        ;; Position at the project heading for capture to nest under it
+        (beginning-of-line))))
+
+  ;; Capture templates - minimal friction, ADHD-friendly
+  (setq org-capture-templates
+        `(("t" "Quick Todo" entry
+           (file ,(expand-file-name "inbox.org" org-directory))
+           "* TODO %?\n:PROPERTIES:\n:CREATED: %U\n:END:\n"
+           :empty-lines 1)
+
+          ("i" "Idea" entry
+           (file ,(expand-file-name "ideas.org" org-directory))
+           "* %?\n:PROPERTIES:\n:CREATED: %U\n:END:\n"
+           :empty-lines 1)
+
+          ("s" "Solution/Knowledge" entry
+           (file ,(expand-file-name "knowledge.org" org-directory))
+           "* %?\n:PROPERTIES:\n:CREATED: %U\n:END:\n\n** Problem\n\n** Solution\n\n"
+           :empty-lines 1)
+
+          ("p" "Project Note" entry
+           (file+function ,(expand-file-name "projects.org" org-directory)
+                          my/org-goto-or-create-project)
+           "** %^{Heading}\n:PROPERTIES:\n:CREATED: %U\n:END:\n\n%?"
+           :empty-lines-after 1))))
 
 
 ;; Whenever you reconfigure a package, make sure to wrap your config in an
@@ -166,8 +242,23 @@
     (remove-hook 'post-command-hook #'my/vterm-auto-copy-selection t)
     (message "Cleaned up vterm hooks. Restart vterm buffer."))
 
-  ;; Disable evil mode in vterm buffers
+  ;; Disable evil mode in vterm buffers - force emacs state always
   (evil-set-initial-state 'vterm-mode 'emacs)
+
+  ;; Prevent accidentally switching to normal mode in vterm
+  (add-hook 'vterm-mode-hook
+            (lambda ()
+              ;; Force emacs state
+              (evil-emacs-state)
+              ;; Disable normal state keybindings that might trigger mode switching
+              (evil-local-set-key 'emacs (kbd "C-z") nil)  ; Don't switch to normal
+              ))
+
+  ;; If somehow we end up in normal state, immediately switch back to emacs
+  (add-hook 'evil-normal-state-entry-hook
+            (lambda ()
+              (when (eq major-mode 'vterm-mode)
+                (evil-emacs-state))))
 
 
   ;; Standalone vterm launcher for system-wide Super+T
@@ -560,70 +651,7 @@
               (local-set-key (kbd "C-c C-i") #'my/claude-focus-input))))
 
 ;; ============================================================================
-;; Alternative Leader Key (M-SPC) for Non-Evil States
+;; Alternative Leader Key - Let Doom handle automatic mirroring
 ;; ============================================================================
-;; This allows you to use M-SPC (Alt+Space) as leader in vterm, claude-code-ide,
-;; and any other buffer where evil mode is disabled
-
-(map! :leader
-      :prefix "b"
-      :desc "Switch buffer" :n "b" #'consult-buffer
-      :desc "Previous buffer" :n "p" #'previous-buffer
-      :desc "Next buffer" :n "n" #'next-buffer)
-
-;; Define M-SPC as a prefix key globally using define-key
-(define-prefix-command 'my-alt-leader-map)
-(global-set-key (kbd "M-SPC") 'my-alt-leader-map)
-
-;; Buffer commands
-(define-key my-alt-leader-map (kbd "b") (make-sparse-keymap))
-(define-key my-alt-leader-map (kbd "b b") #'+vertico/switch-workspace-buffer)
-(define-key my-alt-leader-map (kbd "b p") #'previous-buffer)
-(define-key my-alt-leader-map (kbd "b n") #'next-buffer)
-(define-key my-alt-leader-map (kbd "b k") #'kill-current-buffer)
-(define-key my-alt-leader-map (kbd "b l") #'ibuffer)
-
-;; File commands
-(define-key my-alt-leader-map (kbd "f") (make-sparse-keymap))
-(define-key my-alt-leader-map (kbd "f f") #'find-file)
-(define-key my-alt-leader-map (kbd "f r") #'recentf-open-files)
-(define-key my-alt-leader-map (kbd "f s") #'save-buffer)
-
-;; Window commands
-(define-key my-alt-leader-map (kbd "w") (make-sparse-keymap))
-(define-key my-alt-leader-map (kbd "w v") #'split-window-right)
-(define-key my-alt-leader-map (kbd "w s") #'split-window-below)
-(define-key my-alt-leader-map (kbd "w d") #'delete-window)
-(define-key my-alt-leader-map (kbd "w w") #'other-window)
-(define-key my-alt-leader-map (kbd "w h") #'windmove-left)
-(define-key my-alt-leader-map (kbd "w j") #'windmove-down)
-(define-key my-alt-leader-map (kbd "w k") #'windmove-up)
-(define-key my-alt-leader-map (kbd "w l") #'windmove-right)
-
-;; Project commands
-(define-key my-alt-leader-map (kbd "p") (make-sparse-keymap))
-(define-key my-alt-leader-map (kbd "p f") #'projectile-find-file)
-(define-key my-alt-leader-map (kbd "p p") #'projectile-switch-project)
-
-;; Claude commands
-(define-key my-alt-leader-map (kbd "C") (make-sparse-keymap))
-(define-key my-alt-leader-map (kbd "C c") #'claude-code-ide-menu)
-(define-key my-alt-leader-map (kbd "C s") #'claude-code-ide)
-(define-key my-alt-leader-map (kbd "C r") #'claude-code-ide-resume)
-(define-key my-alt-leader-map (kbd "C q") #'claude-code-ide-stop)
-(define-key my-alt-leader-map (kbd "C t") #'claude-code-ide-toggle)
-(define-key my-alt-leader-map (kbd "C b") #'claude-code-ide-switch-to-buffer)
-
-;; Common commands
-(define-key my-alt-leader-map (kbd "SPC") #'execute-extended-command)
-(define-key my-alt-leader-map (kbd ":") #'eval-expression)
-
-;; Add which-key descriptions
-(after! which-key
-  (which-key-add-key-based-replacements
-    "M-SPC" "alt-leader"
-    "M-SPC b" "buffer"
-    "M-SPC f" "file"
-    "M-SPC w" "window"
-    "M-SPC p" "project"
-    "M-SPC C" "claude"))
+;; Doom automatically mirrors SPC to M-SPC in emacs/insert states
+;; We've removed manual bindings to test if Doom's mirroring works properly
